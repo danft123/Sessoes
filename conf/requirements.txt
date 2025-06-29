@@ -1,0 +1,8 @@
+torch
+torchaudio
+datasets[audio]
+transformers
+numpy
+ffmpeg-python
+pydub
+hydra-core

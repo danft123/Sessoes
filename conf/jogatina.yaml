@@ -1,0 +1,3 @@
+# Hydra configuration for the project that extracts features from gameplay videos.
+# The goal is to generate timestamps from the player's voice channel
+# and create a subtitle file with these timestamps and the extracted features.
