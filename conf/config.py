@@ -3,6 +3,7 @@ import torch
 # --- Directory Paths ---
 INPUT_AUDIO_DIR = "data/Raw/ProcessedMp3s"
 OUTPUT_TRANSCRIPT_DIR = "data/transcripts"
+OUTPUT_LABEL_DIR = "data/labeling"
 TEMP_DIR = "data/temp" # For masked files and other temporary assets
 
 # --- Voice Masking Parameters (voice_mask.py) ---

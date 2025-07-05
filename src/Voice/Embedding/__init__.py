@@ -1,3 +1,3 @@
-from .label_audio import main as EmbeddingMain
+from .label_audio import main as LabelFolder
 
-__all__ = ["EmbeddingMain"]
+__all__ = ["LabelFolder"]
