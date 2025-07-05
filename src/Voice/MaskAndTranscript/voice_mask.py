@@ -6,6 +6,7 @@ from sklearn.cluster import KMeans
 import webrtcvad
 from typing import List, Tuple, Optional
 import torch
+import torchaudio
 from speechbrain.inference import EncoderClassifier
 
 def compute_ecapa_tdnn_embedding(audio_segment: torch.Tensor, model: EncoderClassifier) -> torch.Tensor:
@@ -38,7 +39,9 @@ def create_voice_mask(
     """
     Creates a mask of timestamps where a user is likely speaking.
     """
-    audio, sr = librosa.load(audio_file, sr=sample_rate)
+    # audio, sr = librosa.load(audio_file, sr=sample_rate)
+    _audio, sr = torchaudio.load(audio_file, channels_first = False)
+    audio = _audio.mean(dim=1) if _audio.ndim > 1 else _audio
     vad = webrtcvad.Vad(VAD_AGGRESSIVENESS)
     frame_length = int(sample_rate * frame_duration / 1000)
     
@@ -46,7 +49,7 @@ def create_voice_mask(
     current_start = None
     
     for i in range(0, len(audio) - frame_length, frame_length):
-        frame_bytes = (audio[i:i + frame_length] * 32767).astype(np.int16).tobytes()
+        frame_bytes = (audio[i:i + frame_length] * 32767).numpy().astype(np.int16).tobytes()
         is_speech = vad.is_speech(frame_bytes, sample_rate)
         timestamp = i / sample_rate
         
@@ -61,10 +64,10 @@ def create_voice_mask(
         voice_segments.append((current_start, len(audio) / sample_rate))
         
     if use_energy_filtering:
-        voice_segments = _filter_by_energy(audio, voice_segments, sr, energy_percentile)
+        voice_segments = _filter_by_energy(audio.numpy(), voice_segments, sr, energy_percentile)
         
     if use_spectral_clustering and len(voice_segments) > 1:
-        voice_segments = _filter_by_spectral_clustering(audio, voice_segments, sr)
+        voice_segments = _filter_by_spectral_clustering(audio.numpy(), voice_segments, sr)
     
     if use_embedding_clustering and len(voice_segments) > 1:
         model = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb")
@@ -74,7 +77,9 @@ def create_voice_mask(
             for file in files:
                 if PERSON in file and file.endswith('.pt'):
                     emb_path = os.path.join(root, file)
-                    emb = torch.load(emb_path)
+                    _emb = torch.load(emb_path)
+                    # change to mono, it is of shape (C,T)
+                    emb = _emb.mean(dim=0) if _emb.ndim > 1 else _emb
                     embs.append(emb)
         voice_segments = _filter_by_embedding_clustering(audio, voice_segments, model, embs)
         
@@ -168,7 +173,7 @@ from sklearn.cluster import DBSCAN
 import torch
 
 def _filter_by_embedding_clustering(
-    audio: np.ndarray,
+    audio: torch.Tensor,
     segments: List[Tuple[float, float]],
     model: EncoderClassifier,
     embs: List[torch.Tensor],
@@ -199,10 +204,11 @@ def _filter_by_embedding_clustering(
     for i, (start, end) in enumerate(segments):
         start_idx = int(start * SAMPLE_RATE)
         end_idx = int(end * SAMPLE_RATE)
+        # audio is of shape (T, C), we cut from start_idx to end_idx
         segment_audio = audio[start_idx:end_idx]
         
         if len(segment_audio) > SAMPLE_RATE * 0.5:  # At least 0.5 seconds
-            embedding = compute_ecapa_tdnn_embedding(torch.tensor(segment_audio), model)
+            embedding = compute_ecapa_tdnn_embedding(segment_audio, model)
             embeddings.append(embedding)
             valid_segments.append((start, end))
     
