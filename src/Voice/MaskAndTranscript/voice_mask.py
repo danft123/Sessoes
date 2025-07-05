@@ -269,6 +269,11 @@ def _filter_by_embedding_clustering(
         if len(final_segments) < len(similarity_set) * 0.3:
             final_segments = filtered_segments_similarity
     
+    # Method 4: Take average of reference embeddings
+    average_ref_embedding = np.mean(reference_embeddings, axis=0)
+    avg_similarities = cosine_similarity([average_ref_embedding], segment_embeddings)[0]
+    
+    
     return final_segments
 
 
