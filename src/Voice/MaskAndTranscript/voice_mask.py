@@ -7,7 +7,7 @@ import webrtcvad
 from typing import List, Tuple, Optional
 import torch
 import torchaudio
-from speechbrain.inference import EncoderClassifier
+from speechbrain.inference.speaker import EncoderClassifier
 
 def compute_ecapa_tdnn_embedding(audio_segment: torch.Tensor, model: EncoderClassifier) -> torch.Tensor:
     if audio_segment.ndim == 1:
