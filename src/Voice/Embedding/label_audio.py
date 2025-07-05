@@ -482,7 +482,7 @@ def process_audio_file(filepath, output_dir, temp_dir):
 def main():
     """Main function to run the batch processing."""
     input_dir = config.INPUT_AUDIO_DIR
-    output_dir = config.OUTPUT_TRANSCRIPT_DIR
+    output_dir = config.OUTPUT_LABEL_DIR
     temp_dir = config.TEMP_DIR
 
     if not os.path.exists(output_dir):
