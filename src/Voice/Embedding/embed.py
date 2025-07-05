@@ -59,7 +59,7 @@ class AudioMetadataLoader:
                     continue
 
                 # Load and resample audio
-                waveform, sr = torchaudio.load(audio_filepath)
+                waveform, sr = torchaudio.load(audio_filepath, channels_first = False)
                 if sr != self.target_sr:
                     waveform = torchaudio.functional.resample(
                                                     waveform,
@@ -147,7 +147,7 @@ def compute_ecapa_tdnn_embeddings(batch_data, classifier, filter_by_person = Non
 
                 start_sample = int(start_time * sr)
                 end_sample = int(end_time * sr)
-                audio_segment = waveform[:, start_sample:end_sample]
+                audio_segment = waveform[start_sample:end_sample,:]
 
                 if audio_segment.ndim == 1:
                     audio_segment = audio_segment.unsqueeze(0)

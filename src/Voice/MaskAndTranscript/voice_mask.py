@@ -5,12 +5,23 @@ import soundfile as sf
 from sklearn.cluster import KMeans
 import webrtcvad
 from typing import List, Tuple, Optional
+import torch
+from speechbrain.inference import EncoderClassifier
+
+def compute_ecapa_tdnn_embedding(audio_segment: torch.Tensor, model: EncoderClassifier) -> torch.Tensor:
+    if audio_segment.ndim == 1:
+        audio_segment = audio_segment.unsqueeze(0)
+
+    with torch.no_grad():
+        embedding = model.encode_batch(audio_segment)
+        embedding = embedding.squeeze()
+    return embedding
 
 # Import settings from the central config file
 from conf.config import (
     SAMPLE_RATE, VAD_AGGRESSIVENESS, VAD_FRAME_DURATION_MS, VAD_VOICE_THRESHOLD,
     VAD_MIN_SPEECH_DURATION_S, ENERGY_FILTERING_ENABLED, ENERGY_PERCENTILE_THRESHOLD,
-    SPECTRAL_CLUSTERING_ENABLED, FADE_DURATION_S, PERSON
+    SPECTRAL_CLUSTERING_ENABLED, FADE_DURATION_S, EMBEDDING_CLUSTERING_ENABLED, PERSON, OUTPUT_LABEL_DIR
 )
 
 def create_voice_mask(
@@ -21,7 +32,8 @@ def create_voice_mask(
     min_speech_duration: float = VAD_MIN_SPEECH_DURATION_S,
     use_energy_filtering: bool = ENERGY_FILTERING_ENABLED,
     energy_percentile: float = ENERGY_PERCENTILE_THRESHOLD,
-    use_spectral_clustering: bool = SPECTRAL_CLUSTERING_ENABLED
+    use_spectral_clustering: bool = SPECTRAL_CLUSTERING_ENABLED,
+    use_embedding_clustering: bool = EMBEDDING_CLUSTERING_ENABLED,
 ) -> List[Tuple[float, float]]:
     """
     Creates a mask of timestamps where a user is likely speaking.
@@ -53,6 +65,18 @@ def create_voice_mask(
         
     if use_spectral_clustering and len(voice_segments) > 1:
         voice_segments = _filter_by_spectral_clustering(audio, voice_segments, sr)
+    
+    if use_embedding_clustering and len(voice_segments) > 1:
+        model = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb")
+        # load embs, which is every .pt object in (use glob since they are inside folders) OUTPUT_LABEL_DIR+'/embeddings with 'PERSON' in the name
+        embs = []
+        for root, dirs, files in os.walk(OUTPUT_LABEL_DIR):
+            for file in files:
+                if PERSON in file and file.endswith('.pt'):
+                    emb_path = os.path.join(root, file)
+                    emb = torch.load(emb_path)
+                    embs.append(emb)
+        voice_segments = _filter_by_embedding_clustering(audio, voice_segments, model, embs)
         
     return voice_segments
 
@@ -136,6 +160,178 @@ def _filter_by_spectral_clustering(
     ]
     
     return filtered_segments
+
+import numpy as np
+from typing import List, Tuple
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.cluster import DBSCAN
+import torch
+
+def _filter_by_embedding_clustering(
+    audio: np.ndarray,
+    segments: List[Tuple[float, float]],
+    model: EncoderClassifier,
+    embs: List[torch.Tensor],
+    similarity_threshold: float = 0.7,
+    min_samples: int = 2
+) -> List[Tuple[float, float]]:
+    """
+    Use ECAPA-TDNN embeddings to filter segments based on speaker characteristics.
+    
+    Args:
+        audio: Audio signal
+        segments: List of (start, end) time segments
+        model: ECAPA-TDNN model for embedding extraction
+        embs: List of reference embeddings for the target speaker
+        similarity_threshold: Minimum cosine similarity for speaker verification
+        min_samples: Minimum samples for DBSCAN clustering
+        
+    Returns:
+        Filtered segments containing only the target speaker
+    """
+    if len(segments) < 2:
+        return segments
+    
+    # Extract embeddings from candidate segments
+    embeddings = []
+    valid_segments = []
+    
+    for i, (start, end) in enumerate(segments):
+        start_idx = int(start * SAMPLE_RATE)
+        end_idx = int(end * SAMPLE_RATE)
+        segment_audio = audio[start_idx:end_idx]
+        
+        if len(segment_audio) > SAMPLE_RATE * 0.5:  # At least 0.5 seconds
+            embedding = compute_ecapa_tdnn_embedding(torch.tensor(segment_audio), model)
+            embeddings.append(embedding)
+            valid_segments.append((start, end))
+    
+    if not embeddings or not embs:
+        return segments
+    
+    # Convert to numpy arrays for processing
+    segment_embeddings = embeddings
+    reference_embeddings = embs
+    
+    # Method 1: Direct similarity comparison with reference embeddings
+    filtered_segments_similarity = []
+    for i, seg_emb in enumerate(segment_embeddings):
+        # Calculate cosine similarity with all reference embeddings
+        similarities = cosine_similarity([seg_emb], reference_embeddings)[0]
+        max_similarity = np.max(similarities)
+        
+        if max_similarity >= similarity_threshold:
+            filtered_segments_similarity.append(valid_segments[i])
+    
+    # Method 2: Enhanced clustering approach with reference embeddings
+    # Combine reference embeddings with segment embeddings for clustering
+    all_embeddings = np.vstack([reference_embeddings, segment_embeddings])
+    
+    # Use DBSCAN for clustering (handles noise and varying cluster sizes)
+    clustering = DBSCAN(
+        eps=1 - similarity_threshold,  # Convert similarity to distance
+        min_samples=min_samples,
+        metric='cosine'
+    ).fit(all_embeddings)
+    
+    # Find which cluster(s) contain the reference embeddings
+    ref_labels = clustering.labels_[:len(reference_embeddings)]
+    target_clusters = set(ref_labels[ref_labels >= 0])  # Exclude noise (-1)
+    
+    # Filter segments based on clustering results
+    filtered_segments_clustering = []
+    segment_labels = clustering.labels_[len(reference_embeddings):]
+    
+    for i, label in enumerate(segment_labels):
+        if label in target_clusters and label >= 0:  # Not noise
+            filtered_segments_clustering.append(valid_segments[i])
+    
+    # Method 3: Ensemble approach - combine both methods
+    # Take intersection of both methods for high confidence
+    similarity_set = set(filtered_segments_similarity)
+    clustering_set = set(filtered_segments_clustering)
+    
+    # Use similarity method as primary, clustering as validation
+    # If clustering gives significantly fewer results, trust similarity more
+    if len(clustering_set) < len(similarity_set) * 0.5:
+        final_segments = filtered_segments_similarity
+    else:
+        # Take intersection for high confidence
+        final_segments = list(similarity_set.intersection(clustering_set))
+        
+        # If intersection is too restrictive, fall back to similarity method
+        if len(final_segments) < len(similarity_set) * 0.3:
+            final_segments = filtered_segments_similarity
+    
+    return final_segments
+
+
+def compute_speaker_embedding_statistics(embs: List[np.ndarray]) -> dict:
+    """
+    Compute statistics for reference embeddings to help with threshold tuning.
+    
+    Args:
+        embs: List of reference embeddings
+        
+    Returns:
+        Dictionary with embedding statistics
+    """
+    if not embs:
+        return {}
+    
+    embeddings = np.array(embs)
+    
+    # Compute pairwise similarities within reference embeddings
+    similarities = cosine_similarity(embeddings)
+    
+    # Remove diagonal (self-similarity)
+    mask = np.ones(similarities.shape, dtype=bool)
+    np.fill_diagonal(mask, 0)
+    similarities_flat = similarities[mask]
+    
+    stats = {
+        'mean_intra_similarity': np.mean(similarities_flat),
+        'std_intra_similarity': np.std(similarities_flat),
+        'min_intra_similarity': np.min(similarities_flat),
+        'max_intra_similarity': np.max(similarities_flat),
+        'embedding_dim': embeddings.shape[1],
+        'num_reference_embeddings': len(embs)
+    }
+    
+    return stats
+
+
+def adaptive_threshold_selection(embs: List[np.ndarray], 
+                               conservative_factor: float = 0.5) -> float:
+    """
+    Automatically select similarity threshold based on reference embeddings.
+    
+    Args:
+        embs: List of reference embeddings
+        conservative_factor: How conservative to be (0.0 = mean, 1.0 = min)
+        
+    Returns:
+        Recommended similarity threshold
+    """
+    stats = compute_speaker_embedding_statistics(embs)
+    
+    if not stats:
+        return 0.7  # Default threshold
+    
+    # Use mean - conservative_factor * std as threshold
+    # This ensures we're conservative enough to avoid false positives
+    mean_sim = stats['mean_intra_similarity']
+    std_sim = stats['std_intra_similarity']
+    
+    threshold = mean_sim - conservative_factor * std_sim
+    
+    # Ensure threshold is within reasonable bounds
+    threshold = max(0.5, min(0.9, threshold))
+    
+    return threshold
+
+
+
 
 def export_audio_segments(
     audio_file: str,

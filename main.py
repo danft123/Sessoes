@@ -1,6 +1,7 @@
-# from src.MaskAndTranscript import MaskAndTranscriptMain
-from src.Voice.Embedding import LabelFolder, LabelAndEmbed
+from src.Voice.MaskAndTranscript import MaskAndTranscriptMain
+from src.Voice.Embedding import LabelFolder, LabelAndEmbed, EmbedLabeledVoiceSegments
 
 # MaskAndTranscriptMain()  # Call the main function to start the process
-LabelAndEmbed()
+# LabelAndEmbed()
 # LabelFolder()  # Call the labeling function to label audio segments
+EmbedLabeledVoiceSegments()

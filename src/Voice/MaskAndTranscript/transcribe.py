@@ -11,6 +11,7 @@ from conf.config import (
 from .audio_utils import transcribe_with_progress # Use relative import
 
 print("Loading model and processor...")
+torch.cuda.empty_cache()
 model = AutoModelForSpeechSeq2Seq.from_pretrained(
     WHISPER_MODEL_ID, torch_dtype=TORCH_DTYPE, low_cpu_mem_usage=True, use_safetensors=True
 ).to(DEVICE)

@@ -15,7 +15,8 @@ VAD_VOICE_THRESHOLD = 0.6              # Confidence threshold for voice activity
 VAD_MIN_SPEECH_DURATION_S = 1.0        # Minimum duration to be considered speech
 ENERGY_FILTERING_ENABLED = True        # Whether to filter by audio energy
 ENERGY_PERCENTILE_THRESHOLD = 30       # Energy percentile to filter quiet segments
-SPECTRAL_CLUSTERING_ENABLED = True     # Use spectral clustering if no personal model
+SPECTRAL_CLUSTERING_ENABLED = False     # Use spectral clustering if no personal model
+EMBEDDING_CLUSTERING_ENABLED = True
 FADE_DURATION_S = 0.1                  # Fade in/out for combined audio to avoid clicks
 
 # --- Transcription Parameters (transcribe.py) ---
