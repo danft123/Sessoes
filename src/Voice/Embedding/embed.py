@@ -146,7 +146,7 @@ def save_embeddings(embeddings, base_save_dir):
 
 if __name__ == '__main__':
     # --- Configuration ---
-    METADATA_BASE_DIR = 'data/transcripts'
+    METADATA_BASE_DIR = 'data/labeling'  # Directory containing metadata files
     EMBEDDINGS_SAVE_DIR = 'data/embeddings'
     BATCH_SIZE = 2 # Process 5 files at a time to manage memory
 

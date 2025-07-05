@@ -389,20 +389,18 @@ def save_labeled_segments(labeled_segments: List[Dict], filepath: str, output_fi
 #             except:
 #                 pass
     
-    # print(f"\nLabeling complete! Approved {len(labeled_segments)} isolated voice segments:")
-    # for segment in labeled_segments:
-    #     print(f"- {segment['name']}: {segment['start']:.2f}s - {segment['end']:.2f}s ({segment['duration']:.2f}s)")
-    
-    # return labeled_segments
-
+import os
+import uuid
+import json
+from datetime import datetime
 
 def process_audio_file(filepath, output_dir, temp_dir):
     """Processes a single audio file through the full pipeline."""
     print("-" * 50)
     # if os.path.join(output_dir, f"{session_id}_metadata.json") exists then we already processed, return ...
     # if 'art1_change_to_hardware_' in filepath:
-    #     print(f"Skipping already processed file: {os.path.basename(filepath)}")
-    #     return ...
+    # print(f"Skipping already processed file: {os.path.basename(filepath)}")
+    # return ...
     print(f"Processing: {os.path.basename(filepath)}")
 
     # Ensure temp directory exists
@@ -458,24 +456,29 @@ def process_audio_file(filepath, output_dir, temp_dir):
             for seg in negative_segments
         ]
 
-        # Save session metadata to a JSON file in the output directory
-        metadata_filename = os.path.join(output_dir, f"{session_id}_metadata.json")
-        import json
+        # Generate timestamped filename for the combined metadata file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        metadata_filename = os.path.join(output_dir, f"sessions_metadata_{timestamp}.json")
+        
+        # Load existing data if file exists, otherwise create new dict
+        if os.path.exists(metadata_filename):
+            with open(metadata_filename, 'r') as f:
+                all_sessions_data = json.load(f)
+        else:
+            all_sessions_data = {}
+        
+        # Add current session data using UUID as key
+        all_sessions_data[session_id] = session_metadata
+        
+        # Save combined metadata to timestamped JSON file
         with open(metadata_filename, 'w') as f:
-            json.dump(session_metadata, f, indent=4)
-        print(f"Session metadata saved to: {metadata_filename}")
-
+            json.dump(all_sessions_data, f, indent=4)
+        
+        print(f"Session metadata saved to: {metadata_filename} with UUID: {session_id}")
         print("Processing complete.")
 
     except Exception as e:
         print(f"An error occurred during processing: {e}")
-        # It's good practice to have cleanup in the finally block
-    # finally:
-        # Example cleanup
-        # masked_filepath = os.path.join(temp_dir, f"{os.path.basename(filepath)}_masked.mp3")
-        # if os.path.exists(masked_filepath):
-        #     os.remove(masked_filepath)
-        #     print(f"Removed temporary masked file: {masked_filepath}")
 
 
 
