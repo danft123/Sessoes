@@ -81,7 +81,7 @@ class AudioMetadataLoader:
         return batch_data
 
 
-def save_embeddings(embeddings, base_save_dir):
+def save_embeddings(embeddings, base_save_dir, sequence_persons=None):
     """
     Saves computed embeddings to .pt files.
 
@@ -94,7 +94,7 @@ def save_embeddings(embeddings, base_save_dir):
         return
 
     print(f"--- Saving {len(embeddings)} embeddings ---")
-    for seg_id, emb in embeddings.items():
+    for i, (seg_id, emb) in enumerate(embeddings.items()):
         try:
             # session_id = seg_id[:-2] # session_id-0, session_id-1, etc. # this doesnt work because it can be session_id-112 and it would just remove 12
             session_id = seg_id.rsplit('-', 1)[0]  # Get everything before the last '-'
@@ -109,13 +109,15 @@ def save_embeddings(embeddings, base_save_dir):
 
 
 
-def compute_ecapa_tdnn_embeddings(batch_data, classifier):
+def compute_ecapa_tdnn_embeddings(batch_data, classifier, filter_by_person = None):
     """
     Computes ECAPA-TDNN embeddings for positive audio segments in a batch.
 
     Args:
         batch_data (dict): A dictionary containing the loaded audio waveforms and metadata for a batch.
+            The keys are uuid session_ids and the values are dictionaries with keys 'waveform' and 'metadata' with dictionary with keys 'filepath','filename','session_id','FirstVAD','InteractiveLabeling'.
         classifier (EncoderClassifier): The pre-trained SpeechBrain model.
+        filter_by_person (str, optional): If provided, only computes embeddings for segments labeled with this person's name.
 
     Returns:
         dict: A dictionary where keys are segment identifiers (session_id-{i}) and
@@ -139,6 +141,9 @@ def compute_ecapa_tdnn_embeddings(batch_data, classifier):
             try:
                 start_time = segment["start"]
                 end_time = segment["end"]
+                name = segment["name"]
+                if filter_by_person and name != filter_by_person:
+                    continue  # Skip segments not labeled with the specified person
 
                 start_sample = int(start_time * sr)
                 end_sample = int(end_time * sr)
@@ -151,7 +156,7 @@ def compute_ecapa_tdnn_embeddings(batch_data, classifier):
                     embedding = classifier.encode_batch(audio_segment)
                     embedding = embedding.squeeze()
 
-                segment_id = f"{session_id}-{i}"
+                segment_id = f"{session_id}-{name}_{i}"
                 all_embeddings[segment_id] = embedding
                 print(f"Computed embedding for segment: {segment_id}")
 
@@ -187,6 +192,22 @@ def main(METADATA_BASE_DIR='data/labeling', SESSIONS_METADATA_FILENAME='sessions
         exit()
 
     print(f"Found {len(all_session_ids)} total sessions to process.")
+
+    # # Get names of persons in the metadata
+    # sequence_persons = {}
+    # for session_id, metadata in all_sessions_metadata.items():
+    #     sequence_persons[session_id] = []
+    #     if "InteractiveLabeling" in metadata:
+    #         positive_segments = metadata["InteractiveLabeling"].get("positive_segments", [])
+    #         for segment in positive_segments:
+    #             person_name = segment.get("name", None)
+    #             if person_name:
+    #                 sequence_persons[session_id].append(person_name)
+    # # get unique persons
+    # unique_persons = set()
+    # for persons in sequence_persons.values():
+    #     unique_persons.update(persons)
+    # print(f"Unique persons found in metadata: {', '.join(unique_persons)}")
 
     # Load the model once to avoid reloading it for every batch
     print("\nInitializing ECAPA-TDNN model...")

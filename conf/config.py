@@ -7,6 +7,8 @@ OUTPUT_LABEL_DIR = "data/labeling"
 TEMP_DIR = "data/temp" # For masked files and other temporary assets
 
 # --- Voice Masking Parameters (voice_mask.py) ---
+PERSON = "Daniel"  # The person to create a mask for, must match with the labeled audio metadata.
+# VAD (Voice Activity Detection) Parameters
 VAD_AGGRESSIVENESS = 2                 # 0-3: How aggressive VAD is
 VAD_FRAME_DURATION_MS = 30             # 10, 20, or 30
 VAD_VOICE_THRESHOLD = 0.6              # Confidence threshold for voice activity
