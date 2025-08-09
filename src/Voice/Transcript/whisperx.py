@@ -8,19 +8,19 @@ from tqdm import tqdm
 import time
 
 def transcribe_audio(
-    file_path,
-    model="large-v2",
-    align_model=None,
-    batch_size=None,
-    compute_type=None,
-    language=None,
-    diarize=False,
-    highlight_words=False,
-    min_speakers=None,
-    max_speakers=None,
-    hf_token=None,
-    extra_args=None,
-    output_dir=None
+    file_path: str,
+    model: str = "large-v2",
+    align_model: str | None = None,
+    batch_size: int | None = None,
+    compute_type: str | None = None,
+    language: str | None = None,
+    diarize: bool = False,
+    highlight_words: bool = False,
+    min_speakers: int | None = None,
+    max_speakers: int | None = None,
+    hf_token: str | None = None,
+    extra_args: dict | None = None,
+    output_dir: str | None = None
 ):
     """
     Transcribe audio using WhisperX CLI with flexible options.
