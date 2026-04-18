@@ -6,7 +6,6 @@ from speechbrain.inference.speaker import EncoderClassifier
 
 
 import os
-from src.Voice.MaskAndTranscript.voice_mask import create_voice_mask, create_combined_audio
 import conf.config as config # Import the new config file
 
 import librosa
@@ -21,6 +20,7 @@ import webrtcvad
 import uuid
 SAMPLE_RATE = config.SAMPLE_RATE
 
+create_voice_mask = ... #TODO
 
 def label_voice_segments_interactively(
     audio_file: str,
